@@ -34,70 +34,122 @@ for is = 1:numel(cfg.subj)
 
     sess_eye = cell(1,2);
     for sess = 1:2
-        asc_file = fullfile(cfg.data_eye{sess}, [subj '_vm.asc']);
+        % sess2 文件名带 'b' 后缀（s01b_vm.asc）
+        if sess == 1, base = subj; else, base = [subj 'b']; end
+        asc_file = fullfile(cfg.data_eye{sess}, [base '_vm.asc']);
         if ~exist(asc_file,'file')
             warning('Missing %s — skip session %d', asc_file, sess); continue;
         end
         fprintf('  Parsing %s...\n', asc_file);
+
+        % ---- 读取原始数据 + 事件 ----
+        % helper_parse_asc 始终用于获取 gaze 数据（校准归一化需要）
         raw = helper_parse_asc(asc_file);
+        cue_mask = ismember(raw.trig_code, [cfg.trig.cue_left, cfg.trig.cue_right]);
+        cue_samples_evt = raw.trig_time(cue_mask);
+        cue_codes       = raw.trig_code(cue_mask);
 
         % ---- 校准归一化 ----
         [refX_center, halfRange_X, refY_center, halfRange_Y] = ...
             compute_calibration_reference(raw, cfg);
 
-        % ---- 双眼平均 ----
-        if raw.binocular
-            avgX = mean([raw.LX, raw.RX], 2, 'omitnan');
-            avgY = mean([raw.LY, raw.RY], 2, 'omitnan');
+        % ---- 数据 epoching（FieldTrip 或自定义）----
+        use_ft = false;
+        if cfg.use_fieldtrip
+            cfg.add_fieldtrip();
+            % 构建 trl 矩阵：[begsample, endsample, offset, trigger_code]
+            pre_n  = round(cfg.epoch_pre  * cfg.Fs);
+            post_n = round(cfg.epoch_post * cfg.Fs);
+            n_cue  = numel(cue_samples_evt);
+            trl = zeros(n_cue, 4);
+            for k = 1:n_cue
+                [~, smp] = min(abs(raw.t - cue_samples_evt(k)));
+                trl(k,1) = smp - pre_n;     % begsample
+                trl(k,2) = smp + post_n;    % endsample
+                trl(k,3) = -pre_n;          % offset（负值 = cue 前）
+                trl(k,4) = cue_codes(k);    % trigger code
+            end
+            % ft_preprocessing 读取 + epoch 原始数据
+            cfg_ft = [];
+            cfg_ft.dataset = asc_file;
+            cfg_ft.trl     = trl;
+            cfg_ft.channel = {'LX', 'LY', 'RX', 'RY'};
+            try
+                data_ft = ft_preprocessing(cfg_ft);
+                use_ft = true;
+            catch ME
+                warning('ft_preprocessing failed (%s) — falling back to custom epoching', ME.message);
+            end
+        end
+
+        if use_ft
+            % ---- FieldTrip 路径：转换格式 + 校准 + blink ----
+            ntrl  = length(data_ft.trial);
+            ntime = length(data_ft.time{1});
+            trialMat = nan(ntrl, 2, ntime);
+            for k = 1:ntrl
+                ch = data_ft.trial{k};   % [nchan x ntime]
+                if size(ch,1) >= 4
+                    avgX = mean(ch(1:2,:), 1, 'omitnan')';  % LX, RX 平均
+                    avgY = mean(ch(3:4,:), 1, 'omitnan')';  % LY, RY 平均
+                else
+                    avgX = ch(1,:)'; avgY = ch(2,:)';
+                end
+                normX = (avgX - refX_center) / halfRange_X * 100;
+                normY = (avgY - refY_center) / halfRange_Y * 100;
+                nan_m = isnan(normX) | isnan(normY);
+                nan_m = expand_nan(nan_m, round(cfg.blink_pad * cfg.Fs));
+                normX(nan_m) = NaN; normY(nan_m) = NaN;
+                trialMat(k,1,:) = normX;
+                trialMat(k,2,:) = normY;
+            end
+            time_vec = data_ft.time{1};
+            clear data_ft;
         else
-            avgX = raw.LX; avgY = raw.LY;
+            % ---- 自定义路径：helper_parse_asc + 手动 epoch ----
+            % 双眼平均
+            if raw.binocular
+                avgX_all = mean([raw.LX, raw.RX], 2, 'omitnan');
+                avgY_all = mean([raw.LY, raw.RY], 2, 'omitnan');
+            else
+                avgX_all = raw.LX; avgY_all = raw.LY;
+            end
+            % 归一化
+            normX_all = (avgX_all - refX_center) / halfRange_X * 100;
+            normY_all = (avgY_all - refY_center) / halfRange_Y * 100;
+            % 眨眼 NaN 扩展
+            nan_mask = isnan(normX_all) | isnan(normY_all);
+            nan_mask = expand_nan(nan_mask, round(cfg.blink_pad * raw.Fs));
+            normX_all(nan_mask) = NaN;
+            normY_all(nan_mask) = NaN;
+            % 时间戳 → 样本 index
+            cue_samp_idx = nan(size(cue_samples_evt));
+            for k = 1:numel(cue_samples_evt)
+                [~, idx] = min(abs(raw.t - cue_samples_evt(k)));
+                cue_samp_idx(k) = idx;
+            end
+            pre_n  = round(cfg.epoch_pre  * raw.Fs);
+            post_n = round(cfg.epoch_post * raw.Fs);
+            ntime  = pre_n + post_n + 1;
+            time_vec = (-pre_n : post_n) / raw.Fs;
+            ntrl = numel(cue_samp_idx);
+            trialMat = nan(ntrl, 2, ntime);
+            keep = true(ntrl,1);
+            for k = 1:ntrl
+                s0 = cue_samp_idx(k) - pre_n;
+                s1 = cue_samp_idx(k) + post_n;
+                if s0 < 1 || s1 > numel(normX_all), keep(k) = false; continue; end
+                trialMat(k,1,:) = normX_all(s0:s1);
+                trialMat(k,2,:) = normY_all(s0:s1);
+            end
+            trialMat  = trialMat(keep,:,:);
+            cue_codes = cue_codes(keep);
         end
-
-        % ---- 归一化到 ±100% ----
-        normX = (avgX - refX_center) / halfRange_X * 100;
-        normY = (avgY - refY_center) / halfRange_Y * 100;
-
-        % ---- 眨眼 NaN 扩展 ±100 ms ----
-        nan_mask = isnan(normX) | isnan(normY);
-        nan_mask = expand_nan(nan_mask, round(cfg.blink_pad * raw.Fs));
-        normX(nan_mask) = NaN;
-        normY(nan_mask) = NaN;
-
-        % ---- cue 锁时切 epoch ----
-        cue_codes_all = [cfg.trig.cue_left, cfg.trig.cue_right];
-        is_cue = ismember(raw.trig_code, cue_codes_all);
-        cue_times  = raw.trig_time(is_cue);   % ms (EyeLink 时间)
-        cue_codes  = raw.trig_code(is_cue);
-
-        % 时间戳 → 样本 index：raw.t 是单调递增 ms
-        cue_samples = nan(size(cue_times));
-        for k = 1:numel(cue_times)
-            [~, idx] = min(abs(raw.t - cue_times(k)));
-            cue_samples(k) = idx;
-        end
-
-        pre_n  = round(cfg.epoch_pre  * raw.Fs);
-        post_n = round(cfg.epoch_post * raw.Fs);
-        ntime  = pre_n + post_n + 1;
-        time_vec = (-pre_n : post_n) / raw.Fs;
-
-        ntrl = numel(cue_samples);
-        trialMat = nan(ntrl, 2, ntime);
-        keep = true(ntrl,1);
-        for k = 1:ntrl
-            s0 = cue_samples(k) - pre_n;
-            s1 = cue_samples(k) + post_n;
-            if s0 < 1 || s1 > numel(normX), keep(k) = false; continue; end
-            trialMat(k,1,:) = normX(s0:s1);
-            trialMat(k,2,:) = normY(s0:s1);
-        end
-        trialMat   = trialMat(keep,:,:);
-        cue_codes  = cue_codes(keep);
 
         sess_eye{sess}.trialMatrix = trialMat;
         sess_eye{sess}.trialinfo   = cue_codes(:);
         sess_eye{sess}.time        = time_vec;
-        sess_eye{sess}.fsample     = raw.Fs;
+        sess_eye{sess}.fsample     = cfg.Fs;
         sess_eye{sess}.session     = sess * ones(numel(cue_codes),1);
 
         fprintf('  Session %d: %d trials extracted\n', sess, numel(cue_codes));
@@ -187,17 +239,22 @@ for k = 1:numel(codes_uniq)
     refY(k) = median(medY_each(sel), 'omitnan');
 end
 
-% 按 X 排序：最小 3 = left, 中间 1 = center, 最大 3 = right
+% 按 X 排序：3-1-3（左/中/右）
+%   left/right 各对应 3 个校准点（与 top/middle/bottom 配对）
+%   中心点单独 1 个
 [~, ix] = sort(refX);
 leftX_mean   = mean(refX(ix(1:3)));
 centerX      = refX(ix(4));
 rightX_mean  = mean(refX(ix(5:7)));
 
+% 按 Y 排序：2-3-2（上/中/下）
+%   top/bottom 各 2 个（left-top + right-top, left-bot + right-bot）
+%   middle 是 3 个（left-mid + right-mid + 屏幕中心）
 [~, iy] = sort(refY);
 % EyeLink 坐标系：Y 向下增大 → 最小 = 上
-topY_mean    = mean(refY(iy(1:3)));
-centerY      = refY(iy(4));
-bottomY_mean = mean(refY(iy(5:7)));
+topY_mean    = mean(refY(iy(1:2)));
+centerY      = mean(refY(iy(3:5)));
+bottomY_mean = mean(refY(iy(6:7)));
 
 refX_center = centerX;
 refY_center = centerY;

@@ -28,8 +28,9 @@ for is = 1:numel(cfg.subj)
 
     parts = {};
     for sess = 1:2
-        % 文件名形如 s01_vm_DDMMYYYY.txt
-        files = dir(fullfile(cfg.data_log{sess}, [subj '_vm_*.txt']));
+        % 文件名形如 s01_vm_DDMMYYYY.txt（sess2 带 'b' 后缀: s01b_vm_*.txt）
+        if sess == 1, base = subj; else, base = [subj 'b']; end
+        files = dir(fullfile(cfg.data_log{sess}, [base '_vm_*.txt']));
         if isempty(files)
             warning('No log file for %s sess %d', subj, sess); continue;
         end
