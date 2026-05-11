@@ -13,7 +13,7 @@ function cfg = r00_setup()
 % ---- 仓库与外部工具路径 ----
 cfg.repo_root   = 'C:\MATLABEMM\MATLABWorkspaceEMM\VWMMS_EEG_alpha-covertAttention';
 cfg.fieldtrip   = 'C:\MATLABEMM\MATLABAddOnEMM\fieldtrip-20241219';
-cfg.use_fieldtrip = true;  % true = 使用 FieldTrip (ft_read_event/ft_preprocessing/ft_timelockstatistics), false = 使用自定义实现
+cfg.use_fieldtrip = true;  % true = 使用 FieldTrip (ft_redefinetrial/ft_timelockstatistics), false = 使用自定义实现
 % ColorBrewer 工具包可不在此 addpath（绘图脚本里单独 addpath）
 
 % ---- 输入数据目录 ----

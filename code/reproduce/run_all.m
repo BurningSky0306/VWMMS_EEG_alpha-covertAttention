@@ -15,7 +15,7 @@ function run_all(varargin)
 %   r06  group-rate cluster perm      Fig 1b（论文显著性黑横线）
 %
 % 注：r02/r03/r05/r06 依赖各自的前置文件。run_all 一次性顺序跑可保证依赖。
-% 当 cfg.use_fieldtrip = true 时，r01 使用 ft_preprocessing 导入数据，
+% 当 cfg.use_fieldtrip = true 时，r01 使用 ft_redefinetrial 做 epoching，
 % r06 使用 ft_timelockstatistics 做 cluster permutation。
 
 p = inputParser;

@@ -91,7 +91,7 @@ function data_out = get_subFiles(file_dir, varargin)
 - Trigger 编码：cue_left=[21 22]、cue_right=[23 24]、calib=[201 203-209]
 - 微眼跳检测参数：threshold=3、smooth_step=7、minISI=100
 - Trial 分类窗口：200-600 ms post-cue、shift_min=1%
-- **`cfg.use_fieldtrip` 开关**：`true` = 使用 FieldTrip（r01 用 ft_preprocessing 导入数据，r06 用 ft_timelockstatistics 做 cluster permutation），`false` = 使用自定义实现
+- **`cfg.use_fieldtrip` 开关**：`true` = 使用 FieldTrip（r01 用 ft_redefinetrial 做 epoching，r06 用 ft_timelockstatistics 做 cluster permutation），`false` = 使用自定义实现
 - **`cfg.add_fieldtrip` 函数句柄**：将 FieldTrip 目录（`cfg.fieldtrip`）添加到 MATLAB 路径并运行 `ft_defaults`
 
 ### r01_prepare_eye_data.m -- 预处理：.asc -> 归一化 eye_data
@@ -101,10 +101,10 @@ function data_out = get_subFiles(file_dir, varargin)
 处理流程（根据 `cfg.use_fieldtrip` 分支）：
 
 **`cfg.use_fieldtrip = true` 时（FieldTrip 路径）：**
-1. 调用 `helper_parse_asc` 解析 .asc 获取原始 gaze 数据（校准归一化需要）
-2. 校准归一化：用 7 个校准点（trig 201/203-209）计算 center 和 halfRange
-3. 用 `ft_preprocessing` 读取 + epoch 原始数据（基于 cue 事件构建 trl 矩阵）
-4. 转换 FieldTrip cell array 格式为 3D 矩阵，做双眼平均、归一化、blink padding
+1. 调用 `helper_parse_asc` 解析 .asc 获取原始 gaze 数据（.asc 非 FieldTrip 原生格式，无法用 `ft_preprocessing` 直接读取，需用 helper_parse_asc 先解析）
+2. 双眼平均 + 校准归一化 + blink padding（在连续数据上完成）
+3. 构建 FieldTrip 连续数据结构，用 `ft_redefinetrial` 基于 cue 事件的 trl 矩阵做 epoching
+4. 转换 FieldTrip cell array 格式为 3D 矩阵
 
 **`cfg.use_fieldtrip = false` 时（自定义路径，与修改前完全一致）：**
 1. 调用 `helper_parse_asc` 解析 .asc -> 双眼 X/Y + trigger
@@ -117,7 +117,7 @@ function data_out = get_subFiles(file_dir, varargin)
 
 输出：`normalized_eye_data/sNN.mat`（`eye_data.trial [ntrl x 2 x ntime]`、`.trialinfo`、`.time`）
 
-注：如果 `ft_preprocessing` 无法直接读取 .asc 文件，会自动回退到自定义路径。
+注：FieldTrip 的 `ft_preprocessing` 无法直接读取 .asc 文件（无标准 header），因此 r01 始终用 `helper_parse_asc` 读取数据，仅在 epoching 步骤使用 `ft_redefinetrial`。
 
 ### r02_detect_microsaccades.m -- 微眼跳检测 + Fig 1c
 

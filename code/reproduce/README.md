@@ -57,13 +57,13 @@ VWMMS_EEG_alpha-covertAttention/
 |---|---|---|
 | **MATLAB Statistics & ML Toolbox** | `fitrm` / `ranova` / `ttest` | 已装 |
 | **ColorBrewer (Stephen23)** | 配色 `brewermap` | 已装；`r02` 自动 fallback 到 parula |
-| **FieldTrip** | 当 `cfg.use_fieldtrip=true` 时：r01 用 `ft_preprocessing` 导入数据，r06 用 `ft_timelockstatistics` 做 cluster permutation | `C:\MATLABEMM\MATLABAddOnEMM\fieldtrip-20241219` |
+| **FieldTrip** | 当 `cfg.use_fieldtrip=true` 时：r01 用 `ft_redefinetrial` 做 epoching，r06 用 `ft_timelockstatistics` 做 cluster permutation | `C:\MATLABEMM\MATLABAddOnEMM\fieldtrip-20241219` |
 | **原作者代码 (`code/`)** | `PBlab_gazepos2shift_1D` / `gazeShiftRateOverSize` 被本流水线直接调用 | 同仓库 |
 
 ## 关键设计选择
 
 1. **不修改原作者代码**：原 `code/*.m` 保持不动作为参照；本目录 `reproduce/` 全是新增文件。
-2. **FieldTrip 可选集成**：`cfg.use_fieldtrip` 开关控制。`true` 时 r01 用 `ft_preprocessing` 导入数据、r06 用 `ft_timelockstatistics` 做 cluster permutation；`false` 时使用自定义实现，行为与修改前完全一致。
+2. **FieldTrip 可选集成**：`cfg.use_fieldtrip` 开关控制。`true` 时 r01 用 `ft_redefinetrial` 做 epoching、r06 用 `ft_timelockstatistics` 做 cluster permutation；`false` 时使用自定义实现，行为与修改前完全一致。
 3. **校准归一化代码无关**：用 7 个校准点的 X 排序自动识别"左 3 / 中 1 / 右 3"，无需知道 trigger 编码 ↔ 屏幕位置的映射。
 4. **N=2 的 ANOVA 行为**：`r05` 在 N<3 时自动降级为纯描述统计，给出警告而非崩溃。
 5. **Cluster permutation 双实现**：`helper_cluster_perm_1d.m`（自写）和 `ft_timelockstatistics`（FieldTrip），通过 `cfg.use_fieldtrip` 切换。
@@ -85,4 +85,4 @@ VWMMS_EEG_alpha-covertAttention/
 - **未做**：EEG alpha 侧化分析（Fig 3、Fig 4），论文 Fig 4 的"早/晚微眼跳 latency 排序"分析。
 - **trigger 编码 21–24** 的 cfg 中变量名带 `_en`（编码侧），但实际是 cue 时间锁定（与论文 epoching 一致；变量名沿用原作者）。
 - **行为列对齐**：默认假设 .asc cue trigger 数 = 行为 log 行数。若不一致 r04 会按较小者截断并打印警告——出现警告时需手动核查。
-- **FieldTrip ft_preprocessing 兼容性**：`ft_preprocessing` 对 .asc 文件的支持可能因 FieldTrip 版本而异。若失败，r01 会自动回退到 `helper_parse_asc` 的自定义路径。
+- **FieldTrip .asc 兼容性**：`ft_preprocessing` 无法直接读取 .asc 文件（无标准 header），因此 r01 始终用 `helper_parse_asc` 读取原始数据，仅在 epoching 步骤使用 `ft_redefinetrial`。

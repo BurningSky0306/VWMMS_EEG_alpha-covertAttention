@@ -53,76 +53,63 @@ for is = 1:numel(cfg.subj)
         [refX_center, halfRange_X, refY_center, halfRange_Y] = ...
             compute_calibration_reference(raw, cfg);
 
-        % ---- 数据 epoching（FieldTrip 或自定义）----
-        use_ft = false;
+        % ---- 双眼平均 + 校准归一化 + blink padding（两种模式共用）----
+        if raw.binocular
+            avgX_all = mean([raw.LX, raw.RX], 2, 'omitnan');
+            avgY_all = mean([raw.LY, raw.RY], 2, 'omitnan');
+        else
+            avgX_all = raw.LX; avgY_all = raw.LY;
+        end
+        normX_all = (avgX_all - refX_center) / halfRange_X * 100;
+        normY_all = (avgY_all - refY_center) / halfRange_Y * 100;
+        nan_mask = isnan(normX_all) | isnan(normY_all);
+        nan_mask = expand_nan(nan_mask, round(cfg.blink_pad * raw.Fs));
+        normX_all(nan_mask) = NaN;
+        normY_all(nan_mask) = NaN;
+
+        % ---- 数据 epoching（FieldTrip ft_redefinetrial 或自定义）----
         if cfg.use_fieldtrip
             cfg.add_fieldtrip();
-            % 构建 trl 矩阵：[begsample, endsample, offset, trigger_code]
-            pre_n  = round(cfg.epoch_pre  * cfg.Fs);
-            post_n = round(cfg.epoch_post * cfg.Fs);
+            % 构建连续 FieldTrip 数据结构（helper_parse_asc 读数据，FT 做 epoching）
+            data_cont = [];
+            data_cont.label    = {'X'; 'Y'};
+            data_cont.fsample  = raw.Fs;
+            data_cont.trial    = {[normX_all'; normY_all']};   % [2 x Nsamples]
+            data_cont.time     = {(0:numel(normX_all)-1) / raw.Fs};
+            data_cont.nsamples = numel(normX_all);
+
+            % 构建 trl 矩阵：[begsample, endsample, offset]
+            pre_n  = round(cfg.epoch_pre  * raw.Fs);
+            post_n = round(cfg.epoch_post * raw.Fs);
             n_cue  = numel(cue_samples_evt);
-            trl = zeros(n_cue, 4);
+            trl = zeros(n_cue, 3);
             for k = 1:n_cue
                 [~, smp] = min(abs(raw.t - cue_samples_evt(k)));
                 trl(k,1) = smp - pre_n;     % begsample
                 trl(k,2) = smp + post_n;    % endsample
                 trl(k,3) = -pre_n;          % offset（负值 = cue 前）
-                trl(k,4) = cue_codes(k);    % trigger code
             end
-            % ft_preprocessing 读取 + epoch 原始数据
-            cfg_ft = [];
-            cfg_ft.dataset = asc_file;
-            cfg_ft.trl     = trl;
-            cfg_ft.channel = {'LX', 'LY', 'RX', 'RY'};
-            try
-                data_ft = ft_preprocessing(cfg_ft);
-                use_ft = true;
-            catch ME
-                warning('ft_preprocessing failed (%s) — falling back to custom epoching', ME.message);
-            end
-        end
+            % 过滤越界 trial
+            keep_idx = trl(:,1) >= 1 & trl(:,2) <= data_cont.nsamples;
+            trl = trl(keep_idx,:);
+            cue_codes = cue_codes(keep_idx);
 
-        if use_ft
-            % ---- FieldTrip 路径：转换格式 + 校准 + blink ----
-            ntrl  = length(data_ft.trial);
-            ntime = length(data_ft.time{1});
+            % ft_redefinetrial 做 epoching（FT 核心功能）
+            cfg_redef = [];
+            cfg_redef.trl = trl;
+            data_epoched = ft_redefinetrial(cfg_redef, data_cont);
+
+            % 提取为 3D 矩阵
+            ntrl  = length(data_epoched.trial);
+            ntime = length(data_epoched.time{1});
             trialMat = nan(ntrl, 2, ntime);
             for k = 1:ntrl
-                ch = data_ft.trial{k};   % [nchan x ntime]
-                if size(ch,1) >= 4
-                    avgX = mean(ch(1:2,:), 1, 'omitnan')';  % LX, RX 平均
-                    avgY = mean(ch(3:4,:), 1, 'omitnan')';  % LY, RY 平均
-                else
-                    avgX = ch(1,:)'; avgY = ch(2,:)';
-                end
-                normX = (avgX - refX_center) / halfRange_X * 100;
-                normY = (avgY - refY_center) / halfRange_Y * 100;
-                nan_m = isnan(normX) | isnan(normY);
-                nan_m = expand_nan(nan_m, round(cfg.blink_pad * cfg.Fs));
-                normX(nan_m) = NaN; normY(nan_m) = NaN;
-                trialMat(k,1,:) = normX;
-                trialMat(k,2,:) = normY;
+                trialMat(k,:,:) = data_epoched.trial{k};   % [2 x ntime]
             end
-            time_vec = data_ft.time{1};
-            clear data_ft;
+            time_vec = data_epoched.time{1};
+            clear data_cont data_epoched;
         else
-            % ---- 自定义路径：helper_parse_asc + 手动 epoch ----
-            % 双眼平均
-            if raw.binocular
-                avgX_all = mean([raw.LX, raw.RX], 2, 'omitnan');
-                avgY_all = mean([raw.LY, raw.RY], 2, 'omitnan');
-            else
-                avgX_all = raw.LX; avgY_all = raw.LY;
-            end
-            % 归一化
-            normX_all = (avgX_all - refX_center) / halfRange_X * 100;
-            normY_all = (avgY_all - refY_center) / halfRange_Y * 100;
-            % 眨眼 NaN 扩展
-            nan_mask = isnan(normX_all) | isnan(normY_all);
-            nan_mask = expand_nan(nan_mask, round(cfg.blink_pad * raw.Fs));
-            normX_all(nan_mask) = NaN;
-            normY_all(nan_mask) = NaN;
-            % 时间戳 → 样本 index
+            % ---- 自定义路径：手动 epoch ----
             cue_samp_idx = nan(size(cue_samples_evt));
             for k = 1:numel(cue_samples_evt)
                 [~, idx] = min(abs(raw.t - cue_samples_evt(k)));

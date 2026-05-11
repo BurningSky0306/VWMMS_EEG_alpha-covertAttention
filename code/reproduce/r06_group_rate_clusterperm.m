@@ -44,7 +44,6 @@ tvec_w  = tvec(sel_t);
 % --- Cluster permutation ---
 N = size(GA_to_w,1);
 sig_time_mask = false(size(tvec_w));
-ft_used = false;
 if N < 3
     warning('N=%d → cluster permutation skipped (purely descriptive).', N);
     out = struct('clusters',[], 'sigMask',false(size(tvec_w)));
@@ -52,60 +51,56 @@ else
     if cfg.use_fieldtrip
         % FieldTrip: ft_timelockstatistics 配对 cluster permutation
         cfg.add_fieldtrip();
-        try
-            data_toward = [];
-            data_toward.label    = {'rate'};
-            data_toward.time     = {tvec_w};
-            data_toward.dimord   = 'rpt_time';
-            data_toward.trial    = GA_to_w;
 
-            data_away = [];
-            data_away.label    = {'rate'};
-            data_away.time     = {tvec_w};
-            data_away.dimord   = 'rpt_time';
-            data_away.trial    = GA_aw_w;
+        data_toward = [];
+        data_toward.label    = {'rate'};
+        data_toward.time     = {tvec_w};
+        data_toward.dimord   = 'rpt_time';
+        data_toward.trial    = GA_to_w;
 
-            stat_cfg = [];
-            stat_cfg.method           = 'montecarlo';
-            stat_cfg.statistic        = 'depsamplesT';
-            stat_cfg.correctm         = 'cluster';
-            stat_cfg.clusteralpha     = 0.05;
-            stat_cfg.clusterstatistic = 'maxsum';
-            stat_cfg.tail             = 0;
-            stat_cfg.alpha            = 0.05;
-            stat_cfg.numrandomization = 5000;
-            stat_cfg.design = [1:N, 1:N; ones(1,N), 2*ones(1,N)];
-            stat_cfg.ivar = 2;
-            stat_cfg.uvar = 1;
+        data_away = [];
+        data_away.label    = {'rate'};
+        data_away.time     = {tvec_w};
+        data_away.dimord   = 'rpt_time';
+        data_away.trial    = GA_aw_w;
 
-            stat = ft_timelockstatistics(stat_cfg, data_toward, data_away);
-            sig_time_mask = stat.mask(:)';
-            ft_used = true;
+        stat_cfg = [];
+        stat_cfg.method           = 'montecarlo';
+        stat_cfg.statistic        = 'depsamplesT';
+        stat_cfg.correctm         = 'cluster';
+        stat_cfg.clusteralpha     = 0.05;
+        stat_cfg.clusterstatistic = 'maxsum';
+        stat_cfg.tail             = 0;
+        stat_cfg.alpha            = 0.05;
+        stat_cfg.numrandomization = 5000;
+        stat_cfg.design = [1:N, 1:N; ones(1,N), 2*ones(1,N)];
+        stat_cfg.ivar = 2;
+        stat_cfg.uvar = 1;
 
-            nPos = numel(stat.posclusters);
-            nSigPos = sum([stat.posclusters.p] < 0.05);
-            fprintf('FieldTrip cluster perm: %d positive cluster(s) (of %d).\n', nSigPos, nPos);
-            for ic = 1:nPos
-                c = stat.posclusters(ic);
-                if c.prob < 0.05
-                    fprintf('  Positive cluster %d: p=%.4f\n', ic, c.prob);
-                end
+        stat = ft_timelockstatistics(stat_cfg, data_toward, data_away);
+        sig_time_mask = stat.mask(:)';
+
+        nPos = numel(stat.posclusters);
+        nSigPos = sum([stat.posclusters.p] < 0.05);
+        fprintf('FieldTrip cluster perm: %d positive cluster(s) (of %d).\n', nSigPos, nPos);
+        for ic = 1:nPos
+            c = stat.posclusters(ic);
+            if c.prob < 0.05
+                fprintf('  Positive cluster %d: p=%.4f\n', ic, c.prob);
             end
-            nNeg = numel(stat.negclusters);
-            nSigNeg = sum([stat.negclusters.p] < 0.05);
-            fprintf('FieldTrip cluster perm: %d negative cluster(s) (of %d).\n', nSigNeg, nNeg);
-            for ic = 1:nNeg
-                c = stat.negclusters(ic);
-                if c.prob < 0.05
-                    fprintf('  Negative cluster %d: p=%.4f\n', ic, c.prob);
-                end
-            end
-            out = struct('stat', stat, 'sigMask', sig_time_mask);
-        catch ME
-            warning('ft_timelockstatistics failed (%s) — falling back to helper_cluster_perm_1d', ME.message);
         end
-    end
-    if ~ft_used
+        nNeg = numel(stat.negclusters);
+        nSigNeg = sum([stat.negclusters.p] < 0.05);
+        fprintf('FieldTrip cluster perm: %d negative cluster(s) (of %d).\n', nSigNeg, nNeg);
+        for ic = 1:nNeg
+            c = stat.negclusters(ic);
+            if c.prob < 0.05
+                fprintf('  Negative cluster %d: p=%.4f\n', ic, c.prob);
+            end
+        end
+        out = struct('stat', stat, 'sigMask', sig_time_mask);
+
+    else
         out = helper_cluster_perm_1d(GA_to_w, GA_aw_w, 'nPerm',5000, 'alpha',0.05, 'tail',0);
         sig_time_mask = out.sigMask;
         nClust = sum([out.clusters.p] < 0.05);
