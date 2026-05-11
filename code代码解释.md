@@ -86,7 +86,7 @@ function data_out = get_subFiles(file_dir, varargin)
 所有脚本的"配置中心"，返回一个 `cfg` 结构体，包含：
 
 - 路径：仓库根目录、输入数据目录、各输出目录（自动创建）
-- 被试列表：`cfg.subj`（当前设为 `{'s01','s02'}`，可改为全量）
+- 被试列表：`cfg.subj`（当前设为 `{'s01','s02','s03','s04','s06'}`，可改为全量）
 - 实验参数：采样率 1000 Hz、epoch 窗口 -1~+2 s、blink padding 100 ms、校准窗口
 - Trigger 编码：cue_left=[21 22]、cue_right=[23 24]、calib=[201 203-209]
 - 微眼跳检测参数：threshold=3、smooth_step=7、minISI=100
@@ -168,7 +168,7 @@ function data_out = get_subFiles(file_dir, varargin)
 1. 对每个被试，按 toward/no/away 三条件计算 mean error 和 mean RT
 2. 归一化：(val - mean_subj) / mean_subj x 100%
 3. One-way Repeated-Measures ANOVA + Bonferroni 事后配对 t 检验 + Cohen's d
-4. N<3 时自动降级为纯描述统计（跳过推断）
+4. N<3 时自动降级为纯描述统计（跳过推断）；当前默认 N=5，推论统计正常执行
 5. 绘制 Fig 2（上排：原始均值 +/- SEM + 被试连线；下排：归一化散点）
 
 输出：`results/GA_behavior_stats.mat`、`results/figures/fig2_behavior.png`

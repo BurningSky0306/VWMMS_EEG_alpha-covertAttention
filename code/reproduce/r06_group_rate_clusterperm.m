@@ -52,17 +52,21 @@ else
         % FieldTrip: ft_timelockstatistics 配对 cluster permutation
         cfg.add_fieldtrip();
 
+        % 关键：dimord 必须显式包含 'chan' 维度（'rpt_chan_time'），
+        % 使 ft_timelockstatistics 设 cfg.dim = [Nchan, Ntime] 而非 [Ntime]。
+        % 否则 clusterstat→findcluster 会把时间维度误当空间维度，导致
+        % "invalid dimension of spatdimneighbstructmat" 错误。
         data_toward = [];
         data_toward.label    = {'rate'};
         data_toward.time     = {tvec_w};
-        data_toward.dimord   = 'rpt_time';
-        data_toward.trial    = GA_to_w;
+        data_toward.dimord   = 'rpt_chan_time';
+        data_toward.trial    = reshape(GA_to_w, [N, 1, numel(tvec_w)]);
 
         data_away = [];
         data_away.label    = {'rate'};
         data_away.time     = {tvec_w};
-        data_away.dimord   = 'rpt_time';
-        data_away.trial    = GA_aw_w;
+        data_away.dimord   = 'rpt_chan_time';
+        data_away.trial    = reshape(GA_aw_w, [N, 1, numel(tvec_w)]);
 
         stat_cfg = [];
         stat_cfg.method           = 'montecarlo';
@@ -73,6 +77,8 @@ else
         stat_cfg.tail             = 0;
         stat_cfg.alpha            = 0.05;
         stat_cfg.numrandomization = 5000;
+        stat_cfg.channel          = {'rate'};   % 告诉 FieldTrip 要分析哪些通道
+        stat_cfg.neighbours       = [];          % 单通道无空间邻居 → 仅做时间维聚类
         stat_cfg.design = [1:N, 1:N; ones(1,N), 2*ones(1,N)];
         stat_cfg.ivar = 2;
         stat_cfg.uvar = 1;
@@ -81,7 +87,7 @@ else
         sig_time_mask = stat.mask(:)';
 
         nPos = numel(stat.posclusters);
-        nSigPos = sum([stat.posclusters.p] < 0.05);
+        nSigPos = sum([stat.posclusters.prob] < 0.05);
         fprintf('FieldTrip cluster perm: %d positive cluster(s) (of %d).\n', nSigPos, nPos);
         for ic = 1:nPos
             c = stat.posclusters(ic);
@@ -90,7 +96,7 @@ else
             end
         end
         nNeg = numel(stat.negclusters);
-        nSigNeg = sum([stat.negclusters.p] < 0.05);
+        nSigNeg = sum([stat.negclusters.prob] < 0.05);
         fprintf('FieldTrip cluster perm: %d negative cluster(s) (of %d).\n', nSigNeg, nNeg);
         for ic = 1:nNeg
             c = stat.negclusters(ic);

@@ -61,7 +61,7 @@ end
 clusters = struct('start',{},'stop',{},'mass',{},'p',{});
 sigMask = false(1, T);
 for ic = 1:numel(obs_clusters)
-    c = obs_clusters(ic);
+    c = obs_clusters{ic};
     pval = mean(maxMass >= abs(obs_mass(ic)));
     clusters(ic).start = c(1);
     clusters(ic).stop  = c(2);

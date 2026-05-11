@@ -65,18 +65,16 @@ VWMMS_EEG_alpha-covertAttention/
 1. **不修改原作者代码**：原 `code/*.m` 保持不动作为参照；本目录 `reproduce/` 全是新增文件。
 2. **FieldTrip 可选集成**：`cfg.use_fieldtrip` 开关控制。`true` 时 r01 用 `ft_redefinetrial` 做 epoching、r06 用 `ft_timelockstatistics` 做 cluster permutation；`false` 时使用自定义实现，行为与修改前完全一致。
 3. **校准归一化代码无关**：用 7 个校准点的 X 排序自动识别"左 3 / 中 1 / 右 3"，无需知道 trigger 编码 ↔ 屏幕位置的映射。
-4. **N=2 的 ANOVA 行为**：`r05` 在 N<3 时自动降级为纯描述统计，给出警告而非崩溃。
+4. **小 N 安全网**：`r05` 和 `r06` 在 N<3 时自动降级为纯描述统计，给出警告而非崩溃。当前默认 N=5，不会触发此分支。
 5. **Cluster permutation 双实现**：`helper_cluster_perm_1d.m`（自写）和 `ft_timelockstatistics`（FieldTrip），通过 `cfg.use_fieldtrip` 切换。
 
-## 已知限制（小被试量）
+## 已知限制
 
-- 论文 N=23。本流水线默认 `cfg.subj = {'s01','s02'}` 只有 N=2，**用于流程冒烟测试**：
-  - Fig 1b 的 cluster perm 仍可跑但显著性不可解释（自由度太低）
-  - Fig 2 的 RM-ANOVA 自动跳过（仅出描述）
-  - Fig 1c/1d 形状可看，但平滑性差
-- 想跑 N=22（本地全部被试）：编辑 `r00_setup.m` 中的 `cfg.subj`：
+- 论文 N=23。本流水线默认 `cfg.subj = {'s01','s02','s03','s04','s06'}` 为 N=5，**推论统计（RM-ANOVA + cluster permutation）可正常运行**。
+- 想跑更多被试或 N=22（本地全部被试）：编辑 `r00_setup.m` 中的 `cfg.subj`：
   ```matlab
-  cfg.subj = arrayfun(@(n) sprintf('s%02d',n), [1:4 6 8:22], 'UniformOutput', false);
+  % 示例：全部 22 人
+  cfg.subj = arrayfun(@(n) sprintf('s%02d',n), [1:4 6 8:25], 'UniformOutput', false);
   ```
   （s05 / s07 在本地不存在，按论文剔除标准排除）
 
