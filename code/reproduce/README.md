@@ -70,13 +70,9 @@ VWMMS_EEG_alpha-covertAttention/
 
 ## 已知限制
 
-- 论文 N=23。本流水线默认 `cfg.subj = {'s01','s02','s03','s04','s06'}` 为 N=5，**推论统计（RM-ANOVA + cluster permutation）可正常运行**。
-- 想跑更多被试或 N=22（本地全部被试）：编辑 `r00_setup.m` 中的 `cfg.subj`：
-  ```matlab
-  % 示例：全部 22 人
-  cfg.subj = arrayfun(@(n) sprintf('s%02d',n), [1:4 6 8:25], 'UniformOutput', false);
-  ```
-  （s05 / s07 在本地不存在，按论文剔除标准排除）
+- 论文 N=23。本流水线默认 `cfg.subj = arrayfun(@(n) sprintf('s%02d',n), [1:4 6 8:25], 'UniformOutput', false)` 为 N=23，与论文一致。
+- s05 / s07 在本地不存在，按论文剔除标准排除。
+- N=23 推论统计结果：RM-ANOVA Error F(2,44)=2.10, p=0.135；RT F(2,44)=1.68, p=0.198；cluster perm 正/负 cluster 均 p=0.0002。
 
 ## 与论文的偏离 / 注意事项
 

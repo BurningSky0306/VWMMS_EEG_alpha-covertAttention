@@ -36,8 +36,8 @@ for i = 1:numel(dirs)
 end
 
 % ---- 被试列表 ----
-% 论文 N=23（剔除 2 人后），本地有 22 个 .asc。当前用 5 人复现（含推论统计）。
-cfg.subj = {'s01','s02','s03','s04','s06'};
+% 论文 N=23（剔除 2 人后），本地有 23 个 .asc。当前用全部 23 人复现。
+cfg.subj = arrayfun(@(n) sprintf('s%02d',n), [1:4 6 8:25], 'UniformOutput', false);
 
 % ---- 实验参数 ----
 cfg.Fs = 1000;                       % EyeLink 采样率

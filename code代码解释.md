@@ -86,7 +86,7 @@ function data_out = get_subFiles(file_dir, varargin)
 所有脚本的"配置中心"，返回一个 `cfg` 结构体，包含：
 
 - 路径：仓库根目录、输入数据目录、各输出目录（自动创建）
-- 被试列表：`cfg.subj`（当前设为 `{'s01','s02','s03','s04','s06'}`，可改为全量）
+- 被试列表：`cfg.subj`（当前设为全部 23 人：`[1:4 6 8:25]`）
 - 实验参数：采样率 1000 Hz、epoch 窗口 -1~+2 s、blink padding 100 ms、校准窗口
 - Trigger 编码：cue_left=[21 22]、cue_right=[23 24]、calib=[201 203-209]
 - 微眼跳检测参数：threshold=3、smooth_step=7、minISI=100
