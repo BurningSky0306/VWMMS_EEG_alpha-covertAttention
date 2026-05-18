@@ -61,6 +61,14 @@ cfg.detect.winaft = [50 100];
 % ---- Trial 分类窗口（论文 Methods）----
 cfg.sort.t_window     = [0.200 0.600];   % cue 后 200-600 ms
 cfg.sort.shift_min    = 1;               % < 1% (= 0.057°) 视为"过小"
+% 主分析是否排除 0-600 ms 内含 NaN 的 trial。
+% false 更贴近作者公开 sortTrial_onSaccade.m 的实际分类代码；sel_unusable 仍作为 QC 输出。
+% 若要严格按 Methods 中 "dismissed prior to classification" 的文字口径做敏感性检查，可改为 true 后重跑 r03-r06。
+cfg.sort.exclude_unusable_from_main = false;
+
+% ---- 群组时间序列统计窗口 ----
+cfg.stats.rate_wide_window      = [-0.200 1.000];  % 当前复现使用的宽窗口
+cfg.stats.numrandomization      = 10000;           % 论文 Methods
 
 % ---- 加 path ----
 addpath(fullfile(cfg.repo_root, 'code'));            % 原作者代码
