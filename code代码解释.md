@@ -193,6 +193,8 @@ function data_out = get_subFiles(file_dir, varargin)
 
 处理：逐行解析 EyeLink ASC 文本，提取双眼 gaze 样本（LX/LY/RX/RY）、trigger（MSG trig 行）、采样率、屏幕分辨率；自动检测单/双眼记录；将缺失值 `.` 转 NaN
 
+实现细节：样本行第一次出现时用 token 解析判断单眼/双眼，并兼容首行就含 `.` 的情况；后续绝大多数纯数字样本行走 `sscanf(line, '%f', 7)` 热路径，只在列数不足、出现 `.` 缺失值或格式异常时回退到 `parseSampleTokens` / `parseDot` 慢路径。这样保持 `helper_parse_asc(asc_file)` 的接口和输出字段不变，但避免每一行都做 `regexp + str2double`。
+
 输出：`out` 结构（.Fs、.t、.LX/.LY/.RX/.RY、.trig_code/.trig_time、.display、.binocular）
 
 ### helper_cluster_perm_1d.m -- 1D Cluster Permutation 检验

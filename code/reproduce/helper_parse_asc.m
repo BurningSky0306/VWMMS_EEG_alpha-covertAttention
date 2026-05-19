@@ -40,6 +40,7 @@ itrig = 0;
 Fs = 1000;          % 缺省，遇到 SAMPLES 行后覆盖
 display_res = [1920 1080];
 binocular = NaN;    % 待数据行第一次出现时确定
+fast_required_numeric = NaN;
 
 while ~feof(fid)
     line = fgetl(fid);
@@ -73,13 +74,12 @@ while ~feof(fid)
     %   3733597	 1218.7	  592.1	 8463.0	 1254.0	  527.2	 8614.0	.....
     % 缺失字段显示为 '.'（单点），需替换为 NaN。
     if line(1) >= '0' && line(1) <= '9'
-        % 用空白拆分；MATLAB 的 sscanf 对 '.' 会失败，所以先替换
-        % 删除行尾的 status 字段（以非数字字符结尾的部分），保留前 N 个数字
-        toks = regexp(line, '\S+', 'match');
         % 数据列数: 单眼 = 1 + 3 = 4 列；双眼 = 1 + 6 = 7 列。
         % 第 1 列时间戳；后续 status 字段非数字。
         % 自动检测：取前 4 或 7 个看哪个全是 number-like
         if isnan(binocular)
+            % 首个数据行只做一次 token 解析，用于兼容该行含 '.' 的情况。
+            toks = regexp(line, '\S+', 'match');
             % 尝试解析前 7 个为数字
             ncol = 0;
             for k = 1:min(7, numel(toks))
@@ -91,17 +91,37 @@ while ~feof(fid)
                 end
             end
             binocular = (ncol >= 7);
+            fast_required_numeric = 4 + 3*binocular;  % 单眼=4, 双眼=7；不足时走兼容慢路径
+            [ok, tv, lxv, lyv, rxv, ryv] = parseSampleTokens(toks, binocular);
+        else
+            % 热路径：绝大多数样本行没有缺失 '.', sscanf 避免逐行 regexp+str2double。
+            vals = sscanf(line, '%f', 7);
+            ok = numel(vals) >= fast_required_numeric;
+            if ok
+                tv  = vals(1);
+                lxv = vals(2);
+                lyv = vals(3);
+                if binocular
+                    rxv = vals(5);
+                    ryv = vals(6);
+                else
+                    rxv = NaN;
+                    ryv = NaN;
+                end
+            else
+                toks = regexp(line, '\S+', 'match');
+                [ok, tv, lxv, lyv, rxv, ryv] = parseSampleTokens(toks, binocular);
+            end
         end
-        nfields = 7 - 3*~binocular;   % 单眼=4, 双眼=7
-        if numel(toks) < nfields, continue; end
+        if ~ok, continue; end
 
         isamp = isamp + 1;
-        t(isamp)  = str2double(toks{1});
-        LX(isamp) = parseDot(toks{2});
-        LY(isamp) = parseDot(toks{3});
+        t(isamp)  = tv;
+        LX(isamp) = lxv;
+        LY(isamp) = lyv;
         if binocular
-            RX(isamp) = parseDot(toks{5});
-            RY(isamp) = parseDot(toks{6});
+            RX(isamp) = rxv;
+            RY(isamp) = ryv;
         end
     end
 end
@@ -127,5 +147,22 @@ function v = parseDot(s)
 % 将 '.' 或 '...' 等缺失值转 NaN，否则 str2double
 if isempty(s) || s(1) == '.', v = NaN;
 else, v = str2double(s);
+end
+end
+
+function [ok, tv, lxv, lyv, rxv, ryv] = parseSampleTokens(toks, binocular)
+% 慢路径：只在首行检测或样本行含 '.' 时使用，保持旧解析器对缺失值的兼容。
+tv = NaN; lxv = NaN; lyv = NaN; rxv = NaN; ryv = NaN;
+nfields = 4;
+if binocular, nfields = 7; end
+ok = numel(toks) >= nfields;
+if ~ok, return; end
+
+tv  = str2double(toks{1});
+lxv = parseDot(toks{2});
+lyv = parseDot(toks{3});
+if binocular
+    rxv = parseDot(toks{5});
+    ryv = parseDot(toks{6});
 end
 end
